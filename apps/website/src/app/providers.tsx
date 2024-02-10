@@ -9,5 +9,9 @@ export function Providers({ children }: PropsWithChildren) {
 	useUnregisterServiceWorker();
 	useSystemThemeFallback();
 
-	return <ThemeProvider attribute="class">{children}</ThemeProvider>;
+	return (
+		<ThemeProvider attribute="class" forcedTheme="light">
+			{children}
+		</ThemeProvider>
+	);
 }

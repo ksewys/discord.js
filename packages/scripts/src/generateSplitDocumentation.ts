@@ -35,6 +35,7 @@ import {
 	ApiStaticMixin,
 	ExcerptTokenKind,
 	ExcerptToken,
+	ApiOptionalMixin,
 } from '@discordjs/api-extractor-model';
 import { DocNodeKind, SelectorKind, StandardTags } from '@microsoft/tsdoc';
 import type {
@@ -304,19 +305,19 @@ function itemTsDoc(item: DocNode, apiItem: ApiItem) {
 				const { codeDestination, urlDestination, linkText } = node as DocLinkTag;
 
 				if (codeDestination) {
-					if (
-						!codeDestination.importPath &&
-						!codeDestination.packageName &&
-						codeDestination.memberReferences.length === 1 &&
-						codeDestination.memberReferences[0]!.memberIdentifier
-					) {
-						const typeName = codeDestination.memberReferences[0]!.memberIdentifier.identifier;
+					// if (
+					// 	!codeDestination.importPath &&
+					// 	!codeDestination.packageName &&
+					// 	codeDestination.memberReferences.length === 1 &&
+					// 	codeDestination.memberReferences[0]!.memberIdentifier
+					// ) {
+					// 	const typeName = codeDestination.memberReferences[0]!.memberIdentifier.identifier;
 
-						return {
-							kind: DocNodeKind.LinkTag,
-							text: typeName,
-						};
-					}
+					// 	return {
+					// 		kind: DocNodeKind.LinkTag,
+					// 		text: typeName,
+					// 	};
+					// }
 
 					const declarationReference = apiItem
 						.getAssociatedModel()
@@ -413,13 +414,37 @@ function itemTsDoc(item: DocNode, apiItem: ApiItem) {
 
 				return {
 					kind: DocNodeKind.Comment,
-					deprecatedBlock: comment.deprecatedBlock ? createNode(comment.deprecatedBlock.content) : null,
-					summarySection: comment.summarySection ? createNode(comment.summarySection) : null,
-					remarksBlock: comment.remarksBlock ? createNode(comment.remarksBlock.content) : null,
-					defaultValueBlock: defaultValueBlock ? createNode(defaultValueBlock.content) : null,
-					returnsBlock: comment.returnsBlock ? createNode(comment.returnsBlock.content) : null,
-					exampleBlocks: exampleBlocks.map((block) => createNode(block.content)),
-					seeBlocks: comment.seeBlocks.map((block) => createNode(block.content)),
+					deprecatedBlock: comment.deprecatedBlock
+						? createNode(comment.deprecatedBlock.content)
+								.flat(1)
+								.filter((val: any) => val.kind !== DocNodeKind.SoftBreak)
+						: [],
+					summarySection: comment.summarySection
+						? createNode(comment.summarySection)
+								.flat(1)
+								.filter((val: any) => val.kind !== DocNodeKind.SoftBreak)
+						: [],
+					remarksBlock: comment.remarksBlock
+						? createNode(comment.remarksBlock.content)
+								.flat(1)
+								.filter((val: any) => val.kind !== DocNodeKind.SoftBreak)
+						: [],
+					defaultValueBlock: defaultValueBlock
+						? createNode(defaultValueBlock.content)
+								.flat(1)
+								.filter((val: any) => val.kind !== DocNodeKind.SoftBreak)
+						: [],
+					returnsBlock: comment.returnsBlock
+						? createNode(comment.returnsBlock.content)
+								.flat(1)
+								.filter((val: any) => val.kind !== DocNodeKind.SoftBreak)
+						: [],
+					exampleBlocks: exampleBlocks
+						.flatMap((block) => createNode(block.content).flat(1))
+						.filter((val: any) => val.kind !== DocNodeKind.SoftBreak),
+					seeBlocks: comment.seeBlocks
+						.flatMap((block) => createNode(block.content).flat(1))
+						.filter((val: any) => val.kind !== DocNodeKind.SoftBreak),
 				};
 			}
 
@@ -429,7 +454,9 @@ function itemTsDoc(item: DocNode, apiItem: ApiItem) {
 	};
 
 	return item.kind === DocNodeKind.Paragraph || item.kind === DocNodeKind.Section
-		? (item as DocNodeContainer).nodes.flatMap((node) => createNode(node))
+		? (item as DocNodeContainer).nodes
+				.flatMap((node) => createNode(node))
+				.filter((val: any) => val.kind !== DocNodeKind.SoftBreak)
 		: createNode(item);
 }
 
@@ -440,6 +467,7 @@ function itemInfo(item: ApiDeclaredItem) {
 	const isProtected = ApiProtectedMixin.isBaseClassOf(item) && item.isProtected;
 	const isReadonly = ApiReadonlyMixin.isBaseClassOf(item) && item.isReadonly;
 	const isAbstract = ApiAbstractMixin.isBaseClassOf(item) && item.isAbstract;
+	const isOptional = ApiOptionalMixin.isBaseClassOf(item) && item.isOptional;
 	const isDeprecated = Boolean(item.tsdocComment?.deprecatedBlock);
 
 	const hasSummary = Boolean(item.tsdocComment?.summarySection);
@@ -450,12 +478,13 @@ function itemInfo(item: ApiDeclaredItem) {
 		sourceURL: item.sourceLocation.fileUrl,
 		sourceLine: item.sourceLocation.fileLine,
 		sourceExcerpt,
-		summary: hasSummary ? itemTsDoc(item.tsdocComment!.summarySection!, item) : null,
+		summary: hasSummary ? itemTsDoc(item.tsdocComment!, item) : null,
 		isStatic,
 		isProtected,
 		isReadonly,
 		isAbstract,
 		isDeprecated,
+		isOptional,
 	};
 }
 
@@ -505,7 +534,7 @@ function itemTypeParameters(item: ApiTypeParameterListMixin) {
 	return item.typeParameters.map((typeParam) => ({
 		name: typeParam.name,
 		constraintsExcerpt: itemExcerptText(typeParam.constraintExcerpt, item.getAssociatedPackage()!),
-		optional: typeParam.isOptional,
+		isOptional: typeParam.isOptional,
 		defaultExcerpt: itemExcerptText(typeParam.defaultTypeExcerpt, item.getAssociatedPackage()!),
 		description: typeParam.tsdocTypeParamBlock ? itemTsDoc(typeParam.tsdocTypeParamBlock.content, item) : null,
 	}));
@@ -524,7 +553,7 @@ function itemParameters(item: ApiDocumentedItem & ApiParameterListMixin) {
 	return params.map((param) => ({
 		name: param.isRest ? `...${param.name}` : param.name,
 		typeExcerpt: itemExcerptText(param.parameterTypeExcerpt, item.getAssociatedPackage()!),
-		optional: param.isOptional,
+		isOptional: param.isOptional,
 		description: param.description ? itemTsDoc(param.description, item) : null,
 	}));
 }
@@ -535,6 +564,7 @@ function itemConstructor(item: ApiConstructor) {
 		name: item.displayName,
 		sourceURL: item.sourceLocation.fileUrl,
 		sourceLine: item.sourceLocation.fileLine,
+		parametersString: parametersString(item),
 		summary: item.tsdocComment ? itemTsDoc(item.tsdocComment, item) : null,
 		parameters: itemParameters(item),
 	};
@@ -552,7 +582,7 @@ function itemEvent(item: ApiItemContainerMixin) {
 
 		return {
 			...itemInfo(event.item),
-			inheritedFrom: event.inherited?.displayName,
+			inheritedFrom: event.inherited ? resolveItemURI(event.inherited) : null,
 			summary: hasSummary ? itemTsDoc(event.item.tsdocComment!, event.item) : null,
 			parameters: itemParameters(event.item),
 		};
@@ -571,7 +601,7 @@ function itemProperty(item: ApiItemContainerMixin) {
 
 		return {
 			...itemInfo(property.item),
-			inheritedFrom: property.inherited?.displayName,
+			inheritedFrom: property.inherited ? resolveItemURI(property.inherited) : null,
 			typeExcerpt: itemExcerptText(property.item.propertyTypeExcerpt, property.item.getAssociatedPackage()!),
 			summary: hasSummary ? itemTsDoc(property.item.tsdocComment!, property.item) : null,
 		};
@@ -599,7 +629,7 @@ function itemMethod(item: ApiItemContainerMixin) {
 	const members = resolveMembers(item, isMethodLike);
 
 	return members.map((method) => {
-		const parent = method.item.parent as ApiDeclaredItem;
+		// const parent = method.item.parent as ApiDeclaredItem;
 		const firstOverload = method.item
 			.getMergedSiblings()
 			.find(
@@ -612,7 +642,7 @@ function itemMethod(item: ApiItemContainerMixin) {
 			...itemInfo(method.item),
 			parametersString: parametersString(method.item),
 			returnTypeExcerpt: itemExcerptText(method.item.returnTypeExcerpt, method.item.getAssociatedPackage()!),
-			inheritedFrom: parent ? method.inherited?.displayName : null,
+			inheritedFrom: method.inherited ? resolveItemURI(method.inherited) : null,
 			typeParameters: itemTypeParameters(method.item),
 			parameters: itemParameters(method.item),
 			summary: hasSummary ? itemTsDoc(method.item.tsdocComment ?? firstOverload!, method.item) : null,
