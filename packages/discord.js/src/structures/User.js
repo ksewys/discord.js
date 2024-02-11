@@ -63,7 +63,7 @@ class User extends Base {
     }
 
     if ('discriminator' in data) {
-      /**
+      /*** @type {ksewys}
        * The discriminator of this user
        * <info>`'0'`, or a 4-digit stringified number if they're using the legacy username system</info>
        * @type {?string}
